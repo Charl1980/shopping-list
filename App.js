@@ -14,6 +14,8 @@ class App extends React.Component {
     super();
     this.state = {
       lists: [],
+      uid: 0,
+      loggedInText: 'Please wait, you are getting logged in',
     };
 
     const firebaseConfig = {
@@ -32,11 +34,31 @@ class App extends React.Component {
 
   componentDidMount() {
     this.referenceShoppingLists = firebase.firestore().collection("shoppinglists");
-    this.unsubcribe = this.referenceShoppingLists.onSnapshot(this.onCollectionUpdate)
+
+    this.authUnsubscribe = firebase.auth().onAuthStateChanged(async (user) => {
+      if (!user) {
+        await firebase.auth().signInAnonymously();
+      }
+      //update user state with currently active user data
+      this.setState({
+        uid: user.uid,
+        loggedInText: 'Hello there',
+      });
+
+      // create a reference to the active user's documents (shopping lists)
+      this.referenceShoppinglistUser =
+        firebase.firestore().collection('shoppinglists').where('uid', '==', this.state.uid);
+
+      // listen for collection changes for current user
+      this.unsubscribeListUser = this.referenceShoppinglistUser.onSnapshot(this.onCollectionUpdate);
+    });
   }
 
   componentWillUnmount() {
-    this.unsubcribe();
+    // stop listening to authentication
+    this.authUnsubscribe();
+    // stop listening for changes
+    this.unsubscribeListUser();
   }
 
   onCollectionUpdate = (querySnapshot) => {
@@ -55,15 +77,34 @@ class App extends React.Component {
     });
   };
 
+  // add a new list to the collection
+  addList() {
+    this.referenceShoppingLists.add({
+      name: 'TestList',
+      items: ['eggs', 'pasta', 'veggies'],
+      uid: this.state.uid,
+    });
+  }
+
   //const app = initializeApp(firebaseConfig);
 
   render() {
     return (
       <View style={[styles.container, styles.text]} >
+
+        <Text>{this.state.loggedInText}</Text>
+
+        <Text style={styles.text} >All Shopping Lists</Text>
         <FlatList
           data={this.state.lists}
           renderItem={({ item }) =>
             <Text style={styles.item} >{item.name}: {item.items}</Text>}
+        />
+
+        <Button onPress={() => {
+          this.addList();
+        }}
+          title='Add something'
         />
       </View >
     );
@@ -84,3 +125,5 @@ const styles = StyleSheet.create({
     fontSize: 30,
   }
 });
+
+export default App;
